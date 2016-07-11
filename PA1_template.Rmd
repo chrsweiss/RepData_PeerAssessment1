@@ -1,25 +1,167 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Week 2 Course Project"
+author: "Christopher Weiss"
+date: "July 7, 2016"
+output: pdf_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## Loading and preprocessing the data
+```{r loadpackages, include=FALSE}
+library(ggplot2)
+library(dplyr)
+f <- "C:\\Users\\user\\Documents\\Coursera Courses\\Reproducable Research"
+setwd(f)
+rm(list = ls())
+```
+# Code for reading in the dataset and/or processing the data
+
+Loading the .csv of the data into the variable rawdata.
+
+```{r question1}
+rawdata <- read.csv("activity.csv")
+rawdata$date <- as.Date(rawdata$date)
+str(rawdata)
+```
+
+
+# Histogram of the total number of steps taken each day
+
+I am using ggplot2 to create the histogram.  There are many NA values, and I am 
+going to ignore them for the analysis.
+
+```{r question2}
+steps_gr <- 
+  rawdata %>% 
+  group_by(date) %>% 
+  summarize(totalsteps=sum(steps, na.rm=TRUE))
+g <- qplot(steps_gr$totalsteps, 
+           xlab="Steps",
+           ylab="Count of Days",
+           main="Histogram of Steps Per Day")
+g
+```
 
 
 
-## What is mean total number of steps taken per day?
+# Mean and median number of steps taken each day
+
+The mean and median number of steps taken each day can be given easily by the summary function.
+
+```{r question3}
+
+summary(steps_gr$totalsteps)
+
+```
 
 
 
-## What is the average daily activity pattern?
+# Time series plot of the average number of steps taken
+
+Using the line plot function in ggplot2, this time using data that
+has been summarized by interval, rather than by day, as above.
+
+```{r question4}
+steps_gr2 <- 
+  rawdata %>% 
+  group_by(interval) %>% 
+  summarize(avsteps=mean(steps, na.rm=TRUE))
+g <- ggplot(steps_gr2, aes(x=interval,y=avsteps))
+g + geom_line()
+```
+
+# The 5-minute interval that, on average, contains the maximum number of steps
+
+The maxium number of steps can be found using the max function, then by returning
+the observation with that average number of steps, and selecting the interval.
+```{r question5}
+
+maxint <- max(steps_gr2$avsteps)
+t <- subset(steps_gr2, avsteps==maxint)
+t$interval
+
+```
+
+# Code to describe and show a strategy for imputing missing data
+
+First, I am going to make some assumptions:
+1) the number of steps is dependent on the time of day
+2) the number of steps is dependent on the day of the week
+
+Therefore, for any NA value, I will attempt to use the mean of the
+other datapoints with the same day of the week and the same interval.
+It is possible that this won't work, because there might not be
+any valid weekday/interval datapoints from which to calculate a mean,
+so I will have to check for that.
+```{r question6}
+
+rawdata$weekday <- weekdays(rawdata$date)
+steps_gr3 <-
+  rawdata %>%
+  group_by(weekday, interval) %>%
+  summarize(avsteps = mean(steps, na.rm=TRUE))
+
+imp_data <- rawdata
+
+for(i in 1:nrow(imp_data)){
+  if (is.na(imp_data[i,c("steps")])) {
+    int <- imp_data[i,c("interval")]
+    w <- imp_data[i,c("weekday")]
+    imp_data[i,"steps"] <- subset(steps_gr3, weekday==w & interval==int)$avsteps
+  } 
+}
+
+summary(rawdata$steps)
+summary(imp_data$steps)
+
+```
 
 
 
-## Imputing missing values
+# Histogram of the total number of steps taken each day after missing values are imputed
+
+Using the imputed dataset imp_data from above, and grouping by day, gives the following plot:
+```{r question7}
+steps_gr4 <-
+  imp_data %>%
+  group_by(date) %>%
+  summarise(dailysteps=sum(steps))
+
+hist(steps_gr4$dailysteps)
+
+```
 
 
 
-## Are there differences in activity patterns between weekdays and weekends?
+# Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends
+
+Here I have created two subsets of the (imputed) data; one for weekdays and one for weekends.  Then, using base plot, I have created two boxplots.  By making the y axes identical, it makes it easy to
+compare across the two subset of data.  The key observation here is that the weekend days seem to have a smaller variation of the number of steps, as well as a higher mean.
+```{r question8}
+e<- unique(rawdata$weekday)[1:5]
+e
+d <- unique(rawdata$weekday)[6:7]
+d
+
+we <- 
+  subset(imp_data, weekday %in% d) %>% 
+  group_by(date) %>% 
+  summarise(dailysteps=sum(steps))
+wd <- 
+  subset(imp_data, weekday %in% e) %>% 
+  group_by(date) %>% 
+  summarise(dailysteps=sum(steps))
+
+par(mfrow=c(1,2))
+boxplot(we$dailysteps,
+        ylim=c(0,20000),
+        xlab="Daily Steps -- Weekend Day")
+abline(h=mean(we$dailysteps),col="green")
+boxplot(wd$dailysteps,
+        ylim=c(0,20000),
+        xlab="Daily Steps -- Week Day")
+abline(h=mean(wd$dailysteps),col="green")
+```
+
